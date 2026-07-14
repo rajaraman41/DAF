@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AML High Rule Filter</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f0f4ff; --surface: #fff; --surface2: #f7f9ff; --border: #dde3f5;
+    --accent: #2563eb; --accent-light: #eff4ff;
+    --success: #16a34a; --success-light: #f0fdf4;
+    --warning: #d97706; --danger: #dc2626;
+    --text: #0f172a; --text-muted: #64748b; --text-light: #94a3b8;
+    --shadow: 0 1px 3px rgba(0,0,0,.07), 0 4px 16px rgba(37,99,235,.07);
+    --sans: 'Inter', sans-serif; --mono: 'JetBrains Mono', monospace;
+  }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; }
+
+  .header { background: linear-gradient(135deg, #1d4ed8 0%, #4f46e5 100%); padding: 22px 40px; display: flex; align-items: center; gap: 16px; box-shadow: 0 2px 20px rgba(37,99,235,.3); }
+  .header-icon { width: 46px; height: 46px; background: rgba(255,255,255,.18); border-radius: 11px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+  .header-text h1 { font-size: 18px; font-weight: 800; color: #fff; letter-spacing: -.4px; }
+  .header-text p  { font-size: 12px; color: rgba(255,255,255,.65); margin-top: 2px; }
+  .header-badge { margin-left: auto; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.32); color: #fff; font-size: 11px; font-weight: 700; padding: 5px 15px; border-radius: 20px; letter-spacing: .5px; }
+
+  .main { padding: 30px 40px; max-width: 1440px; margin: 0 auto; }
+
+  .upload-zone { background: var(--surface); border: 2.5px dashed #c7d7fa; border-radius: 14px; padding: 46px 28px; text-align: center; cursor: pointer; position: relative; margin-bottom: 24px; transition: border-color .2s, background .2s; box-shadow: var(--shadow); }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: var(--accent-light); }
+  .upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .upload-icon { font-size: 42px; margin-bottom: 12px; }
+  .upload-zone h2 { font-size: 16px; font-weight: 700; margin-bottom: 5px; }
+  .upload-zone p  { font-size: 13px; color: var(--text-muted); }
+  .file-pill { display: none; align-items: center; gap: 8px; margin-top: 14px; background: var(--success-light); border: 1px solid #bbf7d0; color: var(--success); font-size: 12.5px; font-weight: 600; padding: 6px 16px; border-radius: 20px; }
+
+  .stats-bar { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 24px; }
+  .stat-card { background: var(--surface); border-radius: 13px; padding: 18px 22px; box-shadow: var(--shadow); border-top: 4px solid transparent; }
+  .stat-card.blue { border-top-color: #2563eb; } .stat-card.green { border-top-color: #16a34a; } .stat-card.orange { border-top-color: #d97706; } .stat-card.red { border-top-color: #dc2626; }
+  .stat-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--text-muted); }
+  .stat-value { font-size: 32px; font-weight: 800; font-family: var(--mono); line-height: 1.1; margin-top: 3px; }
+  .stat-card.blue .stat-value { color: #2563eb; } .stat-card.green .stat-value { color: #16a34a; } .stat-card.orange .stat-value { color: #d97706; } .stat-card.red .stat-value { color: #dc2626; }
+
+  .legend { display: flex; gap: 14px; align-items: center; margin-bottom: 18px; flex-wrap: wrap; padding: 12px 18px; background: var(--surface); border-radius: 10px; box-shadow: var(--shadow); border: 1px solid var(--border); }
+  .legend-title { font-size: 12px; font-weight: 700; color: var(--text-muted); }
+  .legend-item { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 500; color: var(--text); }
+  .legend-dot { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; }
+  .l-orange  { background: #fed7aa; border: 1.5px solid #f97316; }
+  .l-lred    { background: #fecaca; border: 1.5px solid #f87171; }
+  .l-red     { background: #fca5a5; border: 1.5px solid #dc2626; }
+
+  .controls { display: flex; gap: 10px; align-items: center; margin-bottom: 18px; flex-wrap: wrap; }
+  .search-wrap { flex: 1; min-width: 220px; position: relative; }
+  .search-icon { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--text-light); pointer-events: none; }
+  .search-box { width: 100%; background: var(--surface); border: 1.5px solid var(--border); border-radius: 10px; padding: 9px 14px 9px 38px; color: var(--text); font-family: var(--sans); font-size: 13px; outline: none; box-shadow: var(--shadow); transition: border-color .2s; }
+  .search-box:focus { border-color: var(--accent); }
+  .search-box::placeholder { color: var(--text-light); }
+  .btn { padding: 9px 18px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: var(--sans); display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; transition: all .18s; }
+  .btn-toggle { background: var(--surface); border: 1.5px solid var(--border); color: var(--text-muted); box-shadow: var(--shadow); }
+  .btn-toggle:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-toggle.active { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
+  .btn-export { background: linear-gradient(135deg, #16a34a, #15803d); color: #fff; box-shadow: 0 2px 10px rgba(22,163,74,.28); }
+  .btn-export:hover:not(:disabled) { box-shadow: 0 4px 18px rgba(22,163,74,.38); transform: translateY(-1px); }
+  .btn-export:disabled { background: #e2e8f0; color: #94a3b8; box-shadow: none; cursor: not-allowed; }
+
+  .table-wrap { background: var(--surface); border-radius: 14px; box-shadow: var(--shadow); border: 1px solid var(--border); overflow: hidden; }
+  .table-topbar { padding: 14px 22px; border-bottom: 1px solid var(--border); background: var(--surface2); display: flex; align-items: center; justify-content: space-between; }
+  .table-topbar h3 { font-size: 13px; font-weight: 700; }
+  .row-count { font-size: 11px; font-family: var(--mono); font-weight: 600; background: var(--accent-light); color: var(--accent); padding: 3px 11px; border-radius: 20px; display: none; }
+  .table-scroll { overflow-x: auto; max-height: 520px; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  thead th { background: #f1f5fe; padding: 10px 15px; text-align: left; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .4px; position: sticky; top: 0; z-index: 2; white-space: nowrap; border-bottom: 2px solid var(--border); }
+  tbody tr { border-bottom: 1px solid #f1f5f9; transition: background .1s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { filter: brightness(.97); }
+  tbody tr.matched { background: #eff6ff; }
+  tbody td { padding: 9px 15px; vertical-align: middle; }
+  tbody td.cell-wrap { white-space: normal; min-width: 160px; max-width: 260px; word-break: break-word; }
+  tbody td.cell-nowrap { white-space: nowrap; }
+  .rule-chip { display: inline-flex; align-items: center; background: #eff6ff; border: 1px solid #bfdbfe; color: var(--accent); font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 6px; }
+  .txn-orange   { background: #fff7ed !important; }
+  .txn-lightred { background: #fff1f1 !important; }
+  .txn-red      { background: #ffe4e4 !important; }
+  .txn-chip { display: inline-flex; align-items: center; font-family: var(--mono); font-size: 11.5px; font-weight: 700; padding: 3px 10px; border-radius: 6px; }
+  .chip-orange   { background: #fed7aa; color: #c2410c; border: 1px solid #fb923c; }
+  .chip-lightred { background: #fecaca; color: #b91c1c; border: 1px solid #f87171; }
+  .chip-red      { background: #fca5a5; color: #7f1d1d; border: 1px solid #dc2626; }
+  .chip-normal   { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+
+  .empty { padding: 64px 20px; text-align: center; color: var(--text-muted); }
+  .empty .e-icon { font-size: 44px; margin-bottom: 10px; }
+  .empty p { font-size: 13px; }
+
+  .exporting-overlay { display: none; position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 200; align-items: center; justify-content: center; }
+  .exporting-overlay.show { display: flex; }
+  .exporting-box { background: #fff; border-radius: 16px; padding: 32px 40px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
+  .exporting-box .spin { font-size: 36px; animation: spin 1s linear infinite; display: block; margin-bottom: 12px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .exporting-box p { font-size: 14px; font-weight: 600; color: #0f172a; }
+  .exporting-box small { font-size: 12px; color: #64748b; }
+
+  .toast { position: fixed; bottom: 24px; right: 24px; background: #0f172a; color: #fff; border-radius: 10px; padding: 13px 20px; font-size: 13px; font-weight: 500; display: none; align-items: center; gap: 10px; box-shadow: 0 8px 32px rgba(0,0,0,.2); z-index: 999; max-width: 360px; }
+  .toast.show { display: flex; animation: sup .25s ease; }
+  @keyframes sup { from { transform: translateY(10px); opacity:0 } to { transform: translateY(0); opacity:1 } }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #f1f5f9; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-icon">🛡️</div>
+  <div class="header-text">
+    <h1>AML High Rule Filter</h1>
+    <p>Upload your CSV dump — High AML rule rows with professional colour-coded Excel export</p>
+  </div>
+  <div class="header-badge">37 HIGH RULES</div>
+</div>
+
+<div class="main">
+  <div class="upload-zone" id="uploadZone">
+    <input type="file" id="csvInput" accept=".csv,.CSV"/>
+    <div class="upload-icon">📂</div>
+    <h2>Drop your CSV dump here</h2>
+    <p>or click to browse — rule_id matched against all 37 High AML rules</p>
+    <div class="file-pill" id="filePill">✅ <span id="fileName"></span></div>
+  </div>
+
+  <div class="stats-bar">
+    <div class="stat-card blue">  <div class="stat-label">Total Rows in CSV</div>  <div class="stat-value" id="statTotal">—</div></div>
+    <div class="stat-card green"> <div class="stat-label">Matched High Rules</div> <div class="stat-value" id="statMatched">—</div></div>
+    <div class="stat-card orange"><div class="stat-label">Unique Rule IDs Hit</div><div class="stat-value" id="statUnique">—</div></div>
+    <div class="stat-card red">  <div class="stat-label">Non-High Rows</div>       <div class="stat-value" id="statUnmatched">—</div></div>
+  </div>
+
+  <div class="legend">
+    <span class="legend-title">Transaction Amount Colour Guide:</span>
+    <span class="legend-item"><span class="legend-dot l-orange"></span>₹0 – ₹1.9 Lakh</span>
+    <span class="legend-item"><span class="legend-dot l-lred"></span>₹2 Lakh – ₹5 Lakh</span>
+    <span class="legend-item"><span class="legend-dot l-red"></span>Above ₹5 Lakh</span>
+  </div>
+
+  <div class="controls">
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search-box" type="text" id="searchBox" placeholder="Search any column…" oninput="renderTable()"/>
+    </div>
+    <button class="btn btn-toggle" id="toggleBtn" onclick="toggleView()">👁 Show All Rows</button>
+    <button class="btn btn-export" id="exportBtn" onclick="exportExcel()" disabled>⬇ Download Excel</button>
+  </div>
+
+  <div class="table-wrap">
+    <div class="table-topbar">
+      <h3 id="tableTitle">Waiting for CSV upload…</h3>
+      <span class="row-count" id="rowCount"></span>
+    </div>
+    <div class="table-scroll">
+      <table id="dataTable" style="display:none">
+        <thead id="tableHead"></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+      <div class="empty" id="emptyState">
+        <div class="e-icon">📋</div>
+        <p>Upload a CSV file to begin filtering</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Exporting overlay -->
+<div class="exporting-overlay" id="exportingOverlay">
+  <div class="exporting-box">
+    <span class="spin">⚙️</span>
+    <p>Building your Excel report…</p>
+    <small>Applying colours & formatting</small>
+  </div>
+</div>
+
+<div class="toast" id="toast"><span id="toastMsg"></span></div>
+
+<script>
+const HIGH_RULE_IDS = new Set([1,2,3,4,5,6,7,8,9,12,13,14,15,16,17,30,46,48,52,53,61,79,1001,1002,1021,1022,1023,1024,1025,1026,1027,1028,1029,1041,1042]);
+
+let rawHeaders = [], allRows = [], matchedIdx = [], ruleColIdx = -1, txnColIdx = -1, showAll = false;
+
+function txnBand(raw) {
+  const val = parseFloat(String(raw).replace(/[₹,\s]/g,''));
+  if (isNaN(val) || val <= 0) return 'normal';
+  const L = 100000;
+  if (val > 0      && val < 2*L)  return 'orange';
+  if (val >= 2*L   && val <= 5*L) return 'lightred';
+  if (val > 5*L)                  return 'red';
+  return 'normal';
+}
+
+const zone = document.getElementById('uploadZone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag'));
+zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag'); if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]); });
+document.getElementById('csvInput').addEventListener('change', e => { if (e.target.files[0]) processFile(e.target.files[0]); });
+
+function processFile(file) {
+  if (!/\.csv$/i.test(file.name)) { toast('⚠️ Please upload a .csv file'); return; }
+  document.getElementById('fileName').textContent = file.name;
+  document.getElementById('filePill').style.display = 'inline-flex';
+  const r = new FileReader();
+  r.onload = ev => parseCSV(ev.target.result);
+  r.readAsText(file, 'UTF-8');
+}
+
+function parseCSVFull(text) {
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const records = []; let i = 0, n = text.length;
+  while (i < n) {
+    const record = [];
+    while (i < n) {
+      let field = '';
+      if (text[i] === '"') {
+        i++;
+        while (i < n) {
+          if (text[i] === '"') { if (i+1<n && text[i+1]==='"') { field+='"'; i+=2; } else { i++; break; } }
+          else field += text[i++];
+        }
+      } else {
+        while (i < n && text[i] !== ',' && text[i] !== '\r' && text[i] !== '\n') field += text[i++];
+      }
+      record.push(field);
+      if (i < n && text[i] === ',') { i++; continue; }
+      break;
+    }
+    if (i < n && text[i] === '\r') i++;
+    if (i < n && text[i] === '\n') i++;
+    records.push(record);
+  }
+  return records;
+}
+
+function parseCSV(text) {
+  const records = parseCSVFull(text);
+  if (!records.length) { toast('⚠️ CSV appears empty'); return; }
+  rawHeaders = records[0];
+  ruleColIdx = rawHeaders.findIndex(h => h.replace(/[\s_]/g,'').toLowerCase() === 'ruleid');
+  if (ruleColIdx === -1) { toast('⚠️ No "rule_id" column found'); return; }
+  txnColIdx = rawHeaders.findIndex(h => {
+    const n = h.toLowerCase().replace(/[\s_\(\)\+]/g,'');
+    return n.includes('overalltransaction') || n.includes('creditdebit') || n.includes('totaltransa');
+  });
+  allRows = records.slice(1).filter(r => r.some(c => c.trim() !== ''));
+  matchedIdx = allRows.reduce((acc,r,i) => { if (HIGH_RULE_IDS.has(parseInt(r[ruleColIdx],10))) acc.push(i); return acc; }, []);
+  const uniqueIds = new Set(matchedIdx.map(i => allRows[i][ruleColIdx].trim()));
+  document.getElementById('statTotal').textContent     = allRows.length.toLocaleString();
+  document.getElementById('statMatched').textContent   = matchedIdx.length.toLocaleString();
+  document.getElementById('statUnique').textContent    = uniqueIds.size;
+  document.getElementById('statUnmatched').textContent = (allRows.length - matchedIdx.length).toLocaleString();
+  document.getElementById('exportBtn').disabled = matchedIdx.length === 0;
+  document.getElementById('dataTable').style.display = '';
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('rowCount').style.display = '';
+  renderTable();
+  toast(`✅ ${matchedIdx.length.toLocaleString()} high-rule rows found`);
+}
+
+function renderTable() {
+  if (!rawHeaders.length) return;
+  const q = document.getElementById('searchBox').value.toLowerCase();
+  const sourceIdx = showAll ? allRows.map((_,i)=>i) : matchedIdx;
+  const matchedSet = new Set(matchedIdx);
+  const visibleIdx = q ? sourceIdx.filter(i => allRows[i].some(c=>c.toLowerCase().includes(q))) : sourceIdx;
+  document.getElementById('tableHead').innerHTML = '<tr>'+rawHeaders.map(h=>`<th>${escH(h)}</th>`).join('')+'</tr>';
+  const tbody = document.getElementById('tableBody');
+  if (!visibleIdx.length) {
+    tbody.innerHTML = `<tr><td colspan="${rawHeaders.length}" style="text-align:center;padding:40px;color:#94a3b8;">No rows match</td></tr>`;
+  } else {
+    tbody.innerHTML = visibleIdx.map(i => {
+      const row = allRows[i];
+      const band = txnColIdx >= 0 ? txnBand(row[txnColIdx]) : 'normal';
+      const rowCls = band !== 'normal' ? `txn-${band}` : (matchedSet.has(i) ? 'matched' : '');
+      const cells = rawHeaders.map((_,ci) => {
+        const v = row[ci] !== undefined ? row[ci] : '';
+        if (ci === ruleColIdx) return `<td class="cell-nowrap"><span class="rule-chip">${escH(v)}</span></td>`;
+        if (ci === txnColIdx) {
+          const cls = band !== 'normal' ? `chip-${band}` : 'chip-normal';
+          return `<td class="cell-nowrap"><span class="txn-chip ${cls}">${escH(v)}</span></td>`;
+        }
+        return `<td class="cell-wrap">${escH(v)}</td>`;
+      }).join('');
+      return `<tr class="${rowCls}">${cells}</tr>`;
+    }).join('');
+  }
+  document.getElementById('tableTitle').textContent = showAll ? 'All Rows (High-rule rows highlighted)' : 'Filtered — High AML Rule Rows';
+  document.getElementById('rowCount').textContent = visibleIdx.length.toLocaleString()+' rows';
+}
+
+function toggleView() {
+  showAll = !showAll;
+  const btn = document.getElementById('toggleBtn');
+  btn.textContent = showAll ? '🔍 Show Matched Only' : '👁 Show All Rows';
+  btn.classList.toggle('active', showAll);
+  renderTable();
+}
+
+/* ══════════════════════════════════════════════════════
+   EXCEL EXPORT — ExcelJS (full style support, free)
+   ══════════════════════════════════════════════════════ */
+async function exportExcel() {
+  if (!matchedIdx.length) return;
+  document.getElementById('exportingOverlay').classList.add('show');
+
+  await new Promise(r => setTimeout(r, 50)); // let UI repaint
+
+  try {
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'AML High Rule Filter';
+    wb.created = new Date();
+
+    const ws = wb.addWorksheet('High Rule Alerts', {
+      views: [{ state: 'frozen', ySplit: 1 }],
+      properties: { defaultRowHeight: 20 }
+    });
+
+    /* ── Colour palette ── */
+    const NAVY      = '1E3A8A';
+    const WHITE     = 'FFFFFFFF';
+    const RULE_BG   = 'DBEAFE';
+    const RULE_FG   = '1D4ED8';
+    const TEXT_DARK = '1E293B';
+    const ROW_EVEN  = 'EFF6FF';
+    const ROW_ODD   = 'FFFFFF';
+
+    // Transaction band colours  { bg, fg, border }
+    const BAND_CLR = {
+      orange:   { bg: 'FFEDD5', fg: 'C2410C', border: 'FB923C' },
+      lightred: { bg: 'FEE2E2', fg: 'B91C1C', border: 'F87171' },
+      red:      { bg: 'FECACA', fg: '7F1D1D', border: 'DC2626' },
+      normal:   { bg: null,     fg: TEXT_DARK, border: 'DBEAFE' }
+    };
+
+    function argb(hex) { return 'FF' + hex.replace('#',''); }
+
+    function thinBorder(hex) {
+      const s = { style:'thin', color:{ argb: argb(hex) } };
+      return { top:s, bottom:s, left:s, right:s };
+    }
+
+    /* ── Column widths from data ── */
+    const colWidths = rawHeaders.map((h, ci) => {
+      let max = h.length;
+      matchedIdx.forEach(ri => {
+        const l = String(allRows[ri][ci]||'').length;
+        if (l > max) max = l;
+      });
+      return Math.min(Math.max(max + 3, 14), 45);
+    });
+
+    ws.columns = rawHeaders.map((h, ci) => ({
+      header: h,
+      key: String(ci),
+      width: colWidths[ci]
+    }));
+
+    /* ── Style header row ── */
+    const hdrRow = ws.getRow(1);
+    hdrRow.height = 30;
+    hdrRow.eachCell(cell => {
+      cell.font      = { name:'Calibri', size:11, bold:true, color:{ argb: WHITE } };
+      cell.fill      = { type:'pattern', pattern:'solid', fgColor:{ argb: argb(NAVY) } };
+      cell.alignment = { horizontal:'center', vertical:'middle', wrapText:false };
+      cell.border    = thinBorder(NAVY);
+    });
+
+
+
+    /* ── Add data rows with styling ── */
+    matchedIdx.forEach((srcIdx, rowNum) => {
+      const raw  = allRows[srcIdx];
+      const band = txnColIdx >= 0 ? txnBand(raw[txnColIdx]) : 'normal';
+      const bc   = BAND_CLR[band] || BAND_CLR.normal;
+      const isEven = (rowNum + 1) % 2 === 0;
+      const baseBg = isEven ? ROW_EVEN : ROW_ODD;
+
+      const values = rawHeaders.map((_, ci) => {
+        const v = raw[ci] !== undefined ? raw[ci] : '';
+        const num = parseFloat(String(v).replace(/[₹,\s]/g,''));
+        return (v !== '' && !isNaN(num) && String(v).replace(/[₹,\s]/g,'').trim() !== '') ? num : v;
+      });
+
+      const dataRow = ws.addRow(values);
+      dataRow.height = 20;
+
+      dataRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        const ci = colNumber - 1;
+        const isRule = ci === ruleColIdx;
+        const isTxn  = ci === txnColIdx;
+
+        // Background colour
+        let bg = baseBg;
+        if (isRule) bg = RULE_BG;
+        else if (isTxn && band !== 'normal') bg = bc.bg;
+
+        // Font colour & bold
+        let fg   = TEXT_DARK;
+        let bold = false;
+        if (isRule)                        { fg = RULE_FG;  bold = true; }
+        else if (isTxn && band !== 'normal') { fg = bc.fg;  bold = true; }
+
+        // Border colour
+        const borderHex = (isTxn && band !== 'normal') ? bc.border : 'DBEAFE';
+
+        cell.fill      = { type:'pattern', pattern:'solid', fgColor:{ argb: argb(bg) } };
+        cell.font      = { name:'Calibri', size:10, bold, color:{ argb: argb(fg) } };
+        cell.alignment = { horizontal: isRule ? 'center' : 'left', vertical:'middle' };
+        cell.border    = thinBorder(borderHex);
+      });
+    });
+
+    /* ── Download ── */
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob   = new Blob([buffer], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url    = URL.createObjectURL(blob);
+    const a      = document.createElement('a');
+    a.href       = url;
+    const today  = new Date().toISOString().slice(0,10);
+    a.download   = `AML_High_Rules_${today}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast(`✅ Downloaded — ${matchedIdx.length} rows, fully formatted`);
+
+  } catch(err) {
+    toast('❌ Export failed: ' + err.message);
+    console.error(err);
+  } finally {
+    document.getElementById('exportingOverlay').classList.remove('show');
+  }
+}
+
+function escH(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  document.getElementById('toastMsg').textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 4000);
+}
+</script>
+</body>
+</html>
